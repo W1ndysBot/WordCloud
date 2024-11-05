@@ -145,6 +145,16 @@ def extract_text_from_message(message):
         return ""
 
 
+# 菜单
+async def menu(websocket, group_id, message_id):
+    message = f"[CQ:reply,id={message_id}]卷卷bot群词云功能菜单\n"
+    message += "卷卷会默默记住群内所有人的发言，并汇总分词绘制词云，并在每天23:59发送今日词云\n"
+    message += "词云统计开关：wcon/wcoff\n"
+    message += "今日词云：今日词云\n"
+    message += "词云菜单：wordcloud\n"
+    await send_group_msg(websocket, group_id, message)
+
+
 # 群消息处理函数
 async def handle_WordCloud_group_message(websocket, msg):
     # 确保数据目录存在
@@ -200,6 +210,10 @@ async def handle_WordCloud_group_message(websocket, msg):
             encoded_string = draw_wordcloud(group_id)
             message = f"[CQ:reply,id={message_id}][CQ:image,file={encoded_string}]"
             await send_group_msg(websocket, group_id, message)
+            return
+
+        if raw_message == "wordcloud":
+            await menu(websocket, group_id, message_id)
             return
 
         if load_function_status(group_id):
