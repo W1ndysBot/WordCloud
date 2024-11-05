@@ -78,71 +78,61 @@ def add_wordcloud_data(group_id, text):
 
 # 获取数据库中的数据
 def get_wordcloud_data(group_id):
-    try:
-        date_str = datetime.now().strftime("%Y_%m_%d")
-        db_path = os.path.join(DATA_DIR, f"{date_str}_{group_id}.db")
-        with sqlite3.connect(db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT word FROM wordcloud")
-            return cursor.fetchall()
-    except Exception as e:
-        logging.error(f"获取词云数据失败: {e}")
-        return []
+
+    date_str = datetime.now().strftime("%Y_%m_%d")
+    db_path = os.path.join(DATA_DIR, f"{date_str}_{group_id}.db")
+    with sqlite3.connect(db_path) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT word FROM wordcloud")
+        return cursor.fetchall()
 
 
 # 绘制词云图片
 def draw_wordcloud(group_id):
-    try:
-        data = get_wordcloud_data(group_id)
+    logging.info(f"绘制词云图片: {group_id}")
+    data = get_wordcloud_data(group_id)
 
-        # logging.info(f"词云数据: {data}")
+    # 合并所有文本
+    combined_text = " ".join(word_tuple[0] for word_tuple in data)
 
-        # 合并所有文本
-        combined_text = " ".join(word_tuple[0] for word_tuple in data)
+    # 使用jieba分词
+    combined_text = " ".join(jieba.lcut(combined_text))
 
-        logging.info(f"合并后文本: {combined_text}")
+    if not combined_text:
+        logging.info(f"今日暂无词云图: {group_id}")
+        return None
 
-        # 使用jieba分词
-        combined_text = " ".join(jieba.lcut(combined_text))
+    # 生成词云
+    wordcloud = WordCloud(
+        font_path="/usr/local/lib/python3.10/dist-packages/matplotlib/mpl-data/fonts/ttf/SIMHEI.TTF",
+        # font_path="simhei.ttf",
+        width=900,
+        height=900,
+        background_color="white",
+    ).generate(combined_text)
 
-        logging.info(f"分词后文本: {combined_text}")
+    # 将词云图像保存到字节流
+    from io import BytesIO
 
-        # 生成词云
-        wordcloud = WordCloud(
-            font_path="/usr/local/lib/python3.10/dist-packages/matplotlib/mpl-data/fonts/ttf/SIMHEI.TTF",
-            width=900,
-            height=900,
-            background_color="white",
-        ).generate(combined_text)
+    image_stream = BytesIO()
+    wordcloud.to_image().save(image_stream, format="PNG")
+    image_stream.seek(0)
 
-        # 将词云图像保存到字节流
-        from io import BytesIO
-
-        image_stream = BytesIO()
-        wordcloud.to_image().save(image_stream, format="PNG")
-        image_stream.seek(0)
-
-        # 将字节流转换为base64编码
-        encoded_string = base64.b64encode(image_stream.read()).decode("utf-8")
-        # logging.info(f"词云图像base64: {encoded_string}")
-        encoded_string = f"base64://{encoded_string}"
-        return encoded_string
-    except Exception as e:
-        logging.error(f"绘制词云失败: {e}")
-        return ""
+    # 将字节流转换为base64编码
+    encoded_string = base64.b64encode(image_stream.read()).decode("utf-8")
+    encoded_string = f"base64://{encoded_string}"
+    logging.info(f"{group_id}词云图片绘制完成")
+    return encoded_string
 
 
 # 提取消息中的文本
 def extract_text_from_message(message):
-    try:
-        text = ""
-        for item in message:
-            if item.get("type") == "text":
-                text += item.get("data", {}).get("text", "")
-        return text
-    except Exception as e:
-        logging.error(f"提取消息文本失败: {e}")
-        return ""
+
+    text = ""
+    for item in message:
+        if item.get("type") == "text":
+            text += item.get("data", {}).get("text", "")
+    return text
 
 
 # 菜单
@@ -208,8 +198,15 @@ async def handle_WordCloud_group_message(websocket, msg):
 
             await send_group_msg(websocket, group_id, "【+】词云图绘制中...")
             encoded_string = draw_wordcloud(group_id)
-            message = f"[CQ:reply,id={message_id}][CQ:image,file={encoded_string}]"
-            await send_group_msg(websocket, group_id, message)
+            if encoded_string:
+                message = f"[CQ:reply,id={message_id}][CQ:image,file={encoded_string}]"
+                await send_group_msg(websocket, group_id, message)
+            else:
+                await send_group_msg(
+                    websocket,
+                    group_id,
+                    f"[CQ:reply,id={message_id}]今日暂无词云图",
+                )
             return
 
         if raw_message == "wordcloud":
@@ -224,6 +221,11 @@ async def handle_WordCloud_group_message(websocket, msg):
 
     except Exception as e:
         logging.error(f"处理WordCloud群消息失败: {e}")
+        await send_group_msg(
+            websocket,
+            group_id,
+            f"[CQ:reply,id={message_id}]处理WordCloud群消息失败: {e}",
+        )
         return
 
 
@@ -232,15 +234,14 @@ async def wordcloud_task(websocket):
     try:
         # 今日日期
         today = datetime.now().strftime("%Y_%m_%d")
-        # 时间是否是每天最后一分钟
         if datetime.now().strftime("%H:%M") == "23:59":
-            # 遍历目录下所有文件
             for file in os.listdir(DATA_DIR):
                 if file.startswith(today):
-                    group_id = file.split("_")[3]
+                    group_id = file.split("_")[3].replace(".db", "")
                     encoded_string = draw_wordcloud(group_id)
-                    message = f"叮咚~这是群{group_id}在{today}的词云图[CQ:image,file={encoded_string}]"
-                    await send_group_msg(websocket, group_id, message)
+                    if encoded_string:
+                        message = f"叮咚~这是群{group_id}在{today.replace('_', '-')}的词云图[CQ:image,file={encoded_string}]"
+                        await send_group_msg(websocket, group_id, message)
 
     except Exception as e:
         logging.error(f"词云定时任务失败: {e}")
