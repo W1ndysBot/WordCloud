@@ -138,10 +138,10 @@ def extract_text_from_message(message):
 # 菜单
 async def menu(websocket, group_id, message_id):
     message = f"[CQ:reply,id={message_id}]卷卷bot群词云功能菜单\n"
-    message += "卷卷会默默记住群内所有人的发言，并汇总分词绘制词云，并在每天23:59发送今日词云\n"
+    message += "开启后卷卷会默默记住群内所有人的发言，并汇总分词绘制词云，并在每天23:59发送今日词云\n"
     message += "词云统计开关：wcon/wcoff\n"
     message += "今日词云：今日词云\n"
-    message += "词云菜单：wordcloud\n"
+    message += "词云菜单：wordcloud"
     await send_group_msg(websocket, group_id, message)
 
 
@@ -158,9 +158,6 @@ async def handle_WordCloud_group_message(websocket, msg):
         message = msg.get("message")
         raw_message = msg.get("raw_message")
 
-        # 初始化数据库
-        init_db(group_id)
-
         # 处理开关命令
         if raw_message == "wcon":
             if load_function_status(group_id):
@@ -174,7 +171,7 @@ async def handle_WordCloud_group_message(websocket, msg):
                 await send_group_msg(
                     websocket,
                     group_id,
-                    f"[CQ:reply,id={message_id}]【+】词云统计已开启",
+                    f"[CQ:reply,id={message_id}]【+】词云统计已开启，现开始记录群内所有聊天汇总整合分词",
                 )
             return True  # 确保处理完命令后返回
 
@@ -196,7 +193,7 @@ async def handle_WordCloud_group_message(websocket, msg):
 
         if raw_message == "今日词云":
 
-            await send_group_msg(websocket, group_id, "【+】词云图绘制中...")
+            await send_group_msg(websocket, group_id, f"[CQ:reply,id={message_id}]【+】词云图绘制中...")
             encoded_string = draw_wordcloud(group_id)
             if encoded_string:
                 message = f"[CQ:reply,id={message_id}][CQ:image,file={encoded_string}]"
@@ -214,6 +211,10 @@ async def handle_WordCloud_group_message(websocket, msg):
             return
 
         if load_function_status(group_id):
+            
+            # 初始化数据库
+            init_db(group_id)
+
             # 提取消息中的文本
             text = extract_text_from_message(message)
             if text:
