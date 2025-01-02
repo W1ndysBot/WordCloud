@@ -70,6 +70,8 @@ def add_wordcloud_data(group_id, text):
         db_path = os.path.join(DATA_DIR, f"{date_str}_{group_id}.db")
         with sqlite3.connect(db_path) as conn:
             cursor = conn.cursor()
+            # 确保表存在
+            cursor.execute("CREATE TABLE IF NOT EXISTS wordcloud (word TEXT)")
             cursor.execute("INSERT INTO wordcloud (word) VALUES (?)", (text,))
             conn.commit()
     except Exception as e:
