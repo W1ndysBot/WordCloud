@@ -195,7 +195,9 @@ async def handle_WordCloud_group_message(websocket, msg):
 
         if raw_message == "今日词云":
 
-            await send_group_msg(websocket, group_id, f"[CQ:reply,id={message_id}]【+】词云图绘制中...")
+            await send_group_msg(
+                websocket, group_id, f"[CQ:reply,id={message_id}]【+】词云图绘制中..."
+            )
             encoded_string = draw_wordcloud(group_id)
             if encoded_string:
                 message = f"[CQ:reply,id={message_id}][CQ:image,file={encoded_string}]"
@@ -213,7 +215,7 @@ async def handle_WordCloud_group_message(websocket, msg):
             return
 
         if load_function_status(group_id):
-            
+
             # 初始化数据库
             init_db(group_id)
 
@@ -248,3 +250,61 @@ async def wordcloud_task(websocket):
 
     except Exception as e:
         logging.error(f"词云定时任务失败: {e}")
+
+
+# 统一事件处理入口
+async def handle_events(websocket, msg):
+    """统一事件处理入口"""
+    try:
+        # 处理回调事件
+        if msg.get("status") == "ok":
+            return
+
+        post_type = msg.get("post_type")
+
+        # 处理元事件
+        if post_type == "meta_event":
+            return
+
+        # 处理消息事件
+        elif post_type == "message":
+            message_type = msg.get("message_type")
+            if message_type == "group":
+                # 调用WordCloud的群组消息处理函数
+                await handle_WordCloud_group_message(websocket, msg)
+            elif message_type == "private":
+                return
+
+        # 处理通知事件
+        elif post_type == "notice":
+            return
+
+        # 处理请求事件
+        elif post_type == "request":
+            return
+
+    except Exception as e:
+        error_type = {
+            "message": "消息",
+            "notice": "通知", 
+            "request": "请求",
+            "meta_event": "元事件",
+        }.get(post_type, "未知")
+
+        logging.error(f"处理WordCloud{error_type}事件失败: {e}")
+
+        # 发送错误提示
+        if post_type == "message":
+            message_type = msg.get("message_type")
+            if message_type == "group":
+                await send_group_msg(
+                    websocket,
+                    msg.get("group_id"),
+                    f"处理WordCloud{error_type}事件失败，错误信息：{str(e)}",
+                )
+            elif message_type == "private":
+                await send_private_msg(
+                    websocket,
+                    msg.get("user_id"),
+                    f"处理WordCloud{error_type}事件失败，错误信息：{str(e)}",
+                )
